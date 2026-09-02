@@ -35,6 +35,15 @@ export default function TabLayout() {
           ),
         }}
       />
+      <Tabs.Screen
+        name="counter"
+        options={{
+          title: "Counter",
+          tabBarIcon: ({ color }) => (
+            <IconSymbol size={28} name="plusminus" color={color} />
+          ),
+        }}
+      />
     </Tabs>
   );
 }
