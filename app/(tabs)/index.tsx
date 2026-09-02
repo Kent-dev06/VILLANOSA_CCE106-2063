@@ -1,152 +1,143 @@
-import { ScrollView, StyleSheet, Text, View } from "react-native";
+import { useState } from 'react';
+import {
+  KeyboardAvoidingView,
+  Platform,
+  Pressable,
+  ScrollView,
+  StyleSheet,
+  Text,
+  TextInput,
+  View,
+} from 'react-native';
 
-export default function HomeScreen() {
+type Operation = '+' | '-' | '×' | '÷';
+
+export default function CalculatorScreen() {
+  const [firstValue, setFirstValue] = useState('');
+  const [secondValue, setSecondValue] = useState('');
+  const [result, setResult] = useState<string | null>(null);
+  const [message, setMessage] = useState('Enter two numbers, then choose an operation.');
+
+  const calculate = (operation: Operation) => {
+    if (!firstValue.trim() || !secondValue.trim()) {
+      setResult(null);
+      setMessage('Please enter both numeric values.');
+      return;
+    }
+
+    const firstNumber = Number(firstValue);
+    const secondNumber = Number(secondValue);
+
+    if (!Number.isFinite(firstNumber) || !Number.isFinite(secondNumber)) {
+      setResult(null);
+      setMessage('Invalid input. Please enter valid numbers only.');
+      return;
+    }
+
+    if (operation === '÷' && secondNumber === 0) {
+      setResult(null);
+      setMessage('Cannot divide by zero. Please change the second value.');
+      return;
+    }
+
+    const answer =
+      operation === '+'
+        ? firstNumber + secondNumber
+        : operation === '-'
+          ? firstNumber - secondNumber
+          : operation === '×'
+            ? firstNumber * secondNumber
+            : firstNumber / secondNumber;
+
+    setResult(String(answer));
+    setMessage(`${firstNumber} ${operation} ${secondNumber} =`);
+  };
+
+  const clearCalculator = () => {
+    setFirstValue('');
+    setSecondValue('');
+    setResult(null);
+    setMessage('Enter two numbers, then choose an operation.');
+  };
+
   return (
-    <ScrollView contentContainerStyle={styles.container}>
-      {/* Header */}
-      <Text style={styles.appTitle}>MY NOTEPAD</Text>
-      <Text style={styles.subtitle}>Your simple space for ideas and notes</Text>
+    <KeyboardAvoidingView
+      behavior={Platform.OS === 'ios' ? 'padding' : undefined}
+      style={styles.screen}>
+      <ScrollView contentContainerStyle={styles.container} keyboardShouldPersistTaps="handled">
+        <View style={styles.card}>
+          <Text style={styles.eyebrow}>MINI PROJECT</Text>
+          <Text style={styles.title}>Simple Calculator</Text>
+          <Text style={styles.subtitle}>Perform basic operations with two numeric values.</Text>
 
-      {/* Student Information */}
-      <View style={styles.card}>
-        <Text style={styles.label}>STUDENT NAME</Text>
-        <Text style={styles.value}>Jhon Dave Ledesma</Text>
-      </View>
+          <Text style={styles.label}>First number</Text>
+          <TextInput
+            accessibilityLabel="First number"
+            keyboardType="decimal-pad"
+            onChangeText={setFirstValue}
+            placeholder="e.g. 10"
+            placeholderTextColor="#8A99A8"
+            style={styles.input}
+            value={firstValue}
+          />
 
-      <View style={styles.card}>
-        <Text style={styles.label}>COURSE / SECTION</Text>
-        <Text style={styles.value}>BSIT - 3rd Year</Text>
-      </View>
+          <Text style={styles.label}>Second number</Text>
+          <TextInput
+            accessibilityLabel="Second number"
+            keyboardType="decimal-pad"
+            onChangeText={setSecondValue}
+            placeholder="e.g. 5"
+            placeholderTextColor="#8A99A8"
+            style={styles.input}
+            value={secondValue}
+          />
 
-      {/* App Idea */}
-      <View style={styles.noteCard}>
-        <Text style={styles.noteIcon}>📝</Text>
+          <View style={styles.operations}>
+            {(['+', '-', '×', '÷'] as Operation[]).map((operation) => (
+              <Pressable
+                accessibilityLabel={`Calculate ${operation}`}
+                key={operation}
+                onPress={() => calculate(operation)}
+                style={({ pressed }) => [styles.operationButton, pressed && styles.buttonPressed]}>
+                <Text style={styles.operationText}>{operation}</Text>
+              </Pressable>
+            ))}
+          </View>
 
-        <Text style={styles.label}>MY APP IDEA</Text>
+          <View style={[styles.resultBox, result === null && styles.messageBox]}>
+            <Text style={styles.resultLabel}>{result === null ? 'MESSAGE' : message}</Text>
+            <Text style={[styles.resultText, result === null && styles.messageText]}>
+              {result ?? message}
+            </Text>
+          </View>
 
-        <Text style={styles.noteTitle}>Personal Notepad</Text>
-
-        <Text style={styles.description}>
-          A simple and easy-to-use mobile notepad application where users can
-          write, organize, and keep their important notes, ideas, reminders, and
-          school information in one convenient place.
-        </Text>
-      </View>
-
-      {/* Notepad Features */}
-      <View style={styles.featuresCard}>
-        <Text style={styles.featuresTitle}>NOTEPAD FEATURES</Text>
-
-        <Text style={styles.feature}>✏️ Write New Notes</Text>
-        <Text style={styles.feature}>📂 Organize Notes</Text>
-        <Text style={styles.feature}>🔍 Find Important Notes</Text>
-        <Text style={styles.feature}>💾 Save Your Ideas</Text>
-      </View>
-
-      {/* Footer */}
-      <Text style={styles.footer}>Jhon Dave Ledesma • My Notepad</Text>
-    </ScrollView>
+          <Pressable onPress={clearCalculator} style={({ pressed }) => [styles.clearButton, pressed && styles.buttonPressed]}>
+            <Text style={styles.clearText}>Clear</Text>
+          </Pressable>
+        </View>
+      </ScrollView>
+    </KeyboardAvoidingView>
   );
 }
 
 const styles = StyleSheet.create({
-  container: {
-    flexGrow: 1,
-    backgroundColor: "#FFF8E7",
-    padding: 24,
-    paddingTop: 45,
-  },
-
-  appTitle: {
-    fontSize: 32,
-    fontWeight: "bold",
-    color: "#3D342B",
-    textAlign: "center",
-  },
-
-  subtitle: {
-    fontSize: 14,
-    color: "#8A7967",
-    textAlign: "center",
-    marginTop: 6,
-    marginBottom: 30,
-  },
-
-  card: {
-    backgroundColor: "#FFFFFF",
-    padding: 20,
-    borderRadius: 14,
-    marginBottom: 15,
-    elevation: 3,
-  },
-
-  noteCard: {
-    backgroundColor: "#FFF0B8",
-    padding: 22,
-    borderRadius: 16,
-    marginTop: 5,
-    marginBottom: 16,
-    elevation: 4,
-  },
-
-  featuresCard: {
-    backgroundColor: "#FFFFFF",
-    padding: 20,
-    borderRadius: 14,
-    elevation: 3,
-  },
-
-  label: {
-    fontSize: 12,
-    fontWeight: "bold",
-    color: "#8A7967",
-    letterSpacing: 1,
-    marginBottom: 7,
-  },
-
-  value: {
-    fontSize: 19,
-    fontWeight: "600",
-    color: "#3D342B",
-  },
-
-  noteIcon: {
-    fontSize: 32,
-    marginBottom: 10,
-  },
-
-  noteTitle: {
-    fontSize: 24,
-    fontWeight: "bold",
-    color: "#5B4636",
-    marginBottom: 10,
-  },
-
-  description: {
-    fontSize: 15,
-    lineHeight: 23,
-    color: "#66584C",
-  },
-
-  featuresTitle: {
-    fontSize: 16,
-    fontWeight: "bold",
-    color: "#3D342B",
-    marginBottom: 15,
-  },
-
-  feature: {
-    fontSize: 15,
-    color: "#66584C",
-    marginBottom: 12,
-  },
-
-  footer: {
-    textAlign: "center",
-    fontSize: 13,
-    fontWeight: "600",
-    color: "#8A7967",
-    marginTop: 28,
-    marginBottom: 15,
-  },
+  screen: { flex: 1, backgroundColor: '#EDF4FF' },
+  container: { flexGrow: 1, justifyContent: 'center', padding: 24 },
+  card: { backgroundColor: '#FFFFFF', borderRadius: 24, elevation: 5, padding: 24, shadowColor: '#1E3A5F', shadowOffset: { width: 0, height: 4 }, shadowOpacity: 0.12, shadowRadius: 12 },
+  eyebrow: { color: '#3972C8', fontSize: 12, fontWeight: '800', letterSpacing: 1.4, marginBottom: 6 },
+  title: { color: '#14213D', fontSize: 30, fontWeight: '800' },
+  subtitle: { color: '#617083', fontSize: 15, lineHeight: 22, marginBottom: 24, marginTop: 6 },
+  label: { color: '#243B53', fontSize: 14, fontWeight: '700', marginBottom: 8 },
+  input: { backgroundColor: '#F6F9FD', borderColor: '#D4E0EF', borderRadius: 12, borderWidth: 1, color: '#14213D', fontSize: 20, marginBottom: 18, paddingHorizontal: 16, paddingVertical: 13 },
+  operations: { flexDirection: 'row', gap: 10, marginBottom: 20 },
+  operationButton: { alignItems: 'center', backgroundColor: '#3972C8', borderRadius: 12, flex: 1, justifyContent: 'center', minHeight: 52 },
+  operationText: { color: '#FFFFFF', fontSize: 24, fontWeight: '800' },
+  buttonPressed: { opacity: 0.75, transform: [{ scale: 0.98 }] },
+  resultBox: { backgroundColor: '#E5F2EC', borderRadius: 14, minHeight: 92, padding: 16 },
+  messageBox: { backgroundColor: '#FFF5DE' },
+  resultLabel: { color: '#397257', fontSize: 13, fontWeight: '800', marginBottom: 5 },
+  resultText: { color: '#1D5137', fontSize: 28, fontWeight: '800' },
+  messageText: { color: '#805C16', fontSize: 15, fontWeight: '600', lineHeight: 21 },
+  clearButton: { alignItems: 'center', marginTop: 18, padding: 10 },
+  clearText: { color: '#3972C8', fontSize: 15, fontWeight: '800' },
 });
