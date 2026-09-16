@@ -1,0 +1,3 @@
+import { StyleSheet, Text, View } from 'react-native';
+export function StatCard({ label, value, tint }: { label: string; value: string | number; tint: string }) { return <View style={[styles.card, { borderTopColor: tint }]}><Text style={styles.value}>{value}</Text><Text style={styles.label}>{label}</Text></View>; }
+const styles = StyleSheet.create({ card: { backgroundColor: '#FFF', borderRadius: 16, borderTopWidth: 4, flex: 1, minWidth: 100, padding: 16, shadowColor: '#183B2B', shadowOpacity: 0.08, shadowRadius: 8, elevation: 2 }, value: { color: '#173A2B', fontSize: 25, fontWeight: '800' }, label: { color: '#637369', fontSize: 12, fontWeight: '600', marginTop: 5 } });
