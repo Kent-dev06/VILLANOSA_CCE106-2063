@@ -1,4 +1,5 @@
 import { useState } from 'react';
+import Lab08Screen from '../lab08';
 import {
   KeyboardAvoidingView,
   Platform,
@@ -12,7 +13,7 @@ import {
 
 type Operation = '+' | '-' | '×' | '÷';
 
-export default function CalculatorScreen() {
+export function CalculatorScreen() {
   const [firstValue, setFirstValue] = useState('');
   const [secondValue, setSecondValue] = useState('');
   const [result, setResult] = useState<string | null>(null);
@@ -119,6 +120,8 @@ export default function CalculatorScreen() {
     </KeyboardAvoidingView>
   );
 }
+
+export default Lab08Screen;
 
 const styles = StyleSheet.create({
   screen: { flex: 1, backgroundColor: '#EDF4FF' },
