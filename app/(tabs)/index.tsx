@@ -1,202 +1,232 @@
 import { StatusBar } from 'expo-status-bar';
 import { useEffect, useState } from 'react';
-import { ActivityIndicator, Pressable, StyleSheet, Text, TextInput, View } from 'react-native';
+import { ActivityIndicator, KeyboardAvoidingView, Platform, Pressable, ScrollView, StyleSheet, Text, TextInput, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 
-import { getStoredSession, Session, signIn, signOut } from '@/services/auth';
-import { ApiRequestError, getRandomQuote } from '@/services/quotes';
+import { AuthRequestError, clearStoredSession, getStoredToken, getStudentProfile, loginStudent, StudentProfile } from '@/services/auth';
 
-export default function QuotesScreen() {
-  const [session, setSession] = useState<Session | null>(null);
-  const [email, setEmail] = useState('student@quotes.app');
-  const [password, setPassword] = useState('123456');
-  const [quoteText, setQuoteText] = useState('');
-  const [author, setAuthor] = useState('');
-  const [isRestoring, setIsRestoring] = useState(true);
-  const [isLoading, setIsLoading] = useState(false);
-  const [error, setError] = useState('');
+export default function StudentPortalScreen() {
+  const [token, setToken] = useState<string | null>(null);
+  const [profile, setProfile] = useState<StudentProfile | null>(null);
+  const [isAuthLoading, setIsAuthLoading] = useState(true);
+  const [isLoginLoading, setIsLoginLoading] = useState(false);
+  const [isProfileLoading, setIsProfileLoading] = useState(false);
+  const [sessionMessage, setSessionMessage] = useState('');
 
-  // Restore an existing encrypted session after the app opens.
+  // Restore the saved token before deciding between the Login and Profile screens.
   useEffect(() => {
     void restoreSession();
   }, []);
 
-  // A successful login automatically fetches protected content.
+  // A restored or newly issued token unlocks the protected profile request.
   useEffect(() => {
-    if (session) {
-      void loadQuote(session.token);
+    if (token) {
+      void loadProfile(token);
     }
-  }, [session]);
+    // loadProfile intentionally runs only when the session token changes.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [token]);
 
   async function restoreSession() {
     try {
-      setSession(await getStoredSession());
-    } catch {
-      setError('Unable to restore your saved session. Please log in again.');
-    } finally {
-      setIsRestoring(false);
-    }
-  }
-
-  async function handleLogin() {
-    setIsLoading(true);
-    setError('');
-
-    try {
-      setSession(await signIn(email, password));
-    } catch (loginError) {
-      setError(loginError instanceof Error ? loginError.message : 'Login failed. Please try again.');
-    } finally {
-      setIsLoading(false);
-    }
-  }
-
-  async function loadQuote(accessToken: string) {
-    setIsLoading(true);
-    setError('');
-
-    try {
-      const quote = await getRandomQuote(accessToken);
-      setQuoteText(quote.text);
-      setAuthor(quote.author);
-    } catch (requestError) {
-      setQuoteText('');
-      setAuthor('');
-      const message = requestError instanceof Error ? requestError.message : 'Unable to load a quote right now.';
-      setError(message);
-
-      // Invalid or forbidden sessions must no longer access protected data.
-      if (requestError instanceof ApiRequestError && (requestError.status === 401 || requestError.status === 403)) {
-        await signOut();
-        setSession(null);
+      const savedToken = await getStoredToken();
+      if (savedToken) {
+        // Prevent a blank protected screen while the profile request begins.
+        setIsProfileLoading(true);
       }
+      setToken(savedToken);
+    } catch {
+      setSessionMessage('Unable to restore your saved session. Please log in again.');
     } finally {
-      setIsLoading(false);
+      setIsAuthLoading(false);
+    }
+  }
+
+  async function loadProfile(accessToken: string) {
+    setIsProfileLoading(true);
+    setSessionMessage('');
+
+    try {
+      setProfile(await getStudentProfile(accessToken));
+    } catch (error) {
+      if (error instanceof AuthRequestError && error.status === 401) {
+        // A rejected token must be cleared from storage and React state.
+        await expireSession();
+        return;
+      }
+      setSessionMessage(error instanceof Error ? error.message : 'Unable to load your profile.');
+    } finally {
+      setIsProfileLoading(false);
+    }
+  }
+
+  async function expireSession() {
+    try {
+      await clearStoredSession();
+    } catch {
+      // Keep the app usable if the device's secure storage is temporarily unavailable.
+    } finally {
+      // Always remove the rejected token from memory, even if storage fails.
+      setToken(null);
+      setProfile(null);
+      setSessionMessage('Session expired, please log in again.');
     }
   }
 
   async function handleLogout() {
-    setIsLoading(true);
-    await signOut();
-    setSession(null);
-    setQuoteText('');
-    setAuthor('');
-    setError('');
-    setIsLoading(false);
+    setIsProfileLoading(true);
+    try {
+      // Clear both SecureStore and in-memory state so logout survives an app restart.
+      await clearStoredSession();
+      setSessionMessage('You have been logged out.');
+    } catch {
+      setSessionMessage('Unable to update secure storage. Please try logging out again.');
+    } finally {
+      setToken(null);
+      setProfile(null);
+      setIsProfileLoading(false);
+    }
   }
 
-  if (isRestoring) {
-    return <LoadingScreen message="Checking your secure session…" />;
+  if (isAuthLoading) {
+    return <FullScreenLoader label="Restoring secure session…" />;
   }
 
-  if (!session) {
-    return (
-      <SafeAreaView style={styles.safeArea} edges={['top', 'bottom']}>
-        <StatusBar style="light" />
-        <View style={styles.container}>
-          <Text style={styles.eyebrow}>QUOTES APP</Text>
-          <Text style={styles.title}>Welcome back</Text>
-          <Text style={styles.subtitle}>Sign in to unlock your daily inspiration.</Text>
-
-          <View style={styles.card}>
-            <Text style={styles.cardTitle}>Login</Text>
-            <Text style={styles.cardHint}>Demo: use any valid email and a 6-character password.</Text>
-            <Text style={styles.inputLabel}>Email address</Text>
-            <TextInput
-              autoCapitalize="none"
-              autoComplete="email"
-              keyboardType="email-address"
-              onChangeText={setEmail}
-              placeholder="you@example.com"
-              placeholderTextColor="#918BA2"
-              style={styles.input}
-              value={email}
-            />
-            <Text style={styles.inputLabel}>Password</Text>
-            <TextInput
-              autoComplete="password"
-              onChangeText={setPassword}
-              placeholder="At least 6 characters"
-              placeholderTextColor="#918BA2"
-              secureTextEntry
-              style={styles.input}
-              value={password}
-            />
-            {error ? <Text style={styles.errorText}>{error}</Text> : null}
-            <Pressable disabled={isLoading} onPress={() => void handleLogin()} style={({ pressed }) => [styles.button, (pressed || isLoading) && styles.buttonPressed]}>
-              {isLoading ? <ActivityIndicator color="#FFFFFF" /> : <Text style={styles.buttonText}>Login securely</Text>}
-            </Pressable>
-          </View>
-          <Text style={styles.securityNote}>Your session token is saved with Expo SecureStore.</Text>
-        </View>
-      </SafeAreaView>
-    );
+  if (!token) {
+    return <LoginScreen disabled={isLoginLoading} message={sessionMessage} onLogin={async (email, password) => {
+      setIsLoginLoading(true);
+      setSessionMessage('');
+      try {
+        const newToken = await loginStudent(email, password);
+        setIsProfileLoading(true);
+        setToken(newToken);
+      } catch (error) {
+        setSessionMessage(error instanceof Error ? error.message : 'Login failed. Please try again.');
+      } finally {
+        setIsLoginLoading(false);
+      }
+    }} />;
   }
 
-  const hasQuote = Boolean(quoteText && author);
+  return (
+    <ProfileScreen
+      error={sessionMessage}
+      isLoading={isProfileLoading}
+      onLogout={() => void handleLogout()}
+      onRetry={() => void loadProfile(token)}
+      profile={profile}
+    />
+  );
+}
+
+function LoginScreen({ disabled, message, onLogin }: { disabled: boolean; message: string; onLogin: (email: string, password: string) => Promise<void> }) {
+  const [email, setEmail] = useState('admin@mail.com');
+  const [password, setPassword] = useState('admin123');
+  const [emailError, setEmailError] = useState('');
+  const [passwordError, setPasswordError] = useState('');
+
+  async function submitLogin() {
+    const cleanEmail = email.trim();
+    let hasError = false;
+
+    setEmailError('');
+    setPasswordError('');
+    if (!cleanEmail) {
+      setEmailError('Email is required.');
+      hasError = true;
+    } else if (!/^\S+@\S+\.\S+$/.test(cleanEmail)) {
+      setEmailError('Enter a valid email address.');
+      hasError = true;
+    }
+    if (!password) {
+      setPasswordError('Password is required.');
+      hasError = true;
+    }
+    if (!hasError) {
+      await onLogin(cleanEmail, password);
+    }
+  }
+
   return (
     <SafeAreaView style={styles.safeArea} edges={['top', 'bottom']}>
       <StatusBar style="light" />
-      <View style={styles.container}>
-        <View style={styles.topRow}>
-          <View>
-            <Text style={styles.eyebrow}>PROTECTED QUOTES</Text>
-            <Text style={styles.userText}>{session.email}</Text>
+      <KeyboardAvoidingView behavior={Platform.OS === 'ios' ? 'padding' : undefined} style={styles.flex}>
+        <ScrollView contentContainerStyle={styles.loginContent} keyboardShouldPersistTaps="handled">
+          <Text style={styles.eyebrow}>STUDENT SERVICES</Text>
+          <Text style={styles.appTitle}>Student Portal</Text>
+          <Text style={styles.tagline}>Access your protected student profile securely.</Text>
+
+          <View style={styles.card}>
+            <Text style={styles.cardTitle}>Welcome back</Text>
+            <Text style={styles.cardDescription}>Sign in with your student account.</Text>
+
+            <Text style={styles.inputLabel}>Email address</Text>
+            <TextInput autoCapitalize="none" autoComplete="email" keyboardType="email-address" onChangeText={setEmail} placeholder="student@email.com" placeholderTextColor="#8190A5" style={[styles.input, emailError && styles.inputError]} value={email} />
+            {emailError ? <Text style={styles.fieldError}>{emailError}</Text> : null}
+
+            <Text style={styles.inputLabel}>Password</Text>
+            <TextInput autoComplete="password" onChangeText={setPassword} placeholder="Enter password" placeholderTextColor="#8190A5" secureTextEntry style={[styles.input, passwordError && styles.inputError]} value={password} />
+            {passwordError ? <Text style={styles.fieldError}>{passwordError}</Text> : null}
+            {message ? <Text style={styles.requestError}>{message}</Text> : null}
+
+            <Pressable accessibilityRole="button" disabled={disabled} onPress={() => void submitLogin()} style={({ pressed }) => [styles.primaryButton, (pressed || disabled) && styles.buttonPressed]}>
+              {disabled ? <ActivityIndicator color="#FFFFFF" /> : <Text style={styles.primaryButtonText}>Login</Text>}
+            </Pressable>
           </View>
-          <Pressable accessibilityRole="button" onPress={() => void handleLogout()} style={styles.logoutButton}>
-            <Text style={styles.logoutText}>Logout</Text>
-          </Pressable>
+          <Text style={styles.demoHint}>Demo credentials: admin@mail.com / admin123</Text>
+          <Text style={styles.secureHint}>Your access token is encrypted with SecureStore.</Text>
+        </ScrollView>
+      </KeyboardAvoidingView>
+    </SafeAreaView>
+  );
+}
+
+function ProfileScreen({ error, isLoading, onLogout, onRetry, profile }: { error: string; isLoading: boolean; onLogout: () => void; onRetry: () => void; profile: StudentProfile | null }) {
+  const initials = profile?.name.split(' ').map((part) => part[0]).join('').slice(0, 2).toUpperCase() ?? 'SP';
+
+  return (
+    <SafeAreaView style={styles.safeArea} edges={['top', 'bottom']}>
+      <StatusBar style="light" />
+      <View style={styles.profileContent}>
+        <View style={styles.headerRow}>
+          <View><Text style={styles.eyebrow}>AUTHENTICATED AREA</Text><Text style={styles.headerTitle}>My Profile</Text></View>
+          <Pressable accessibilityRole="button" onPress={onLogout} style={styles.logoutButton}><Text style={styles.logoutText}>Logout</Text></Pressable>
         </View>
 
-        <Text style={styles.title}>Quotes App</Text>
-        <Text style={styles.subtitle}>A thought worth keeping close.</Text>
-
-        <View style={styles.card}>
-          {isLoading ? (
-            <View style={styles.stateContainer}>
-              <ActivityIndicator size="large" color="#6D5DFB" />
-              <Text style={styles.stateTitle}>Finding a great quote…</Text>
-            </View>
-          ) : error ? (
-            <View style={styles.stateContainer}>
-              <Text style={styles.stateIcon}>!</Text>
-              <Text style={styles.stateTitle}>Request unavailable</Text>
-              <Text style={styles.stateText}>{error}</Text>
-            </View>
-          ) : hasQuote ? (
-            <View style={styles.quoteContainer}>
-              <Text style={styles.quoteMark}>“</Text>
-              <Text style={styles.quoteText}>{quoteText}</Text>
-              <View style={styles.authorRow}><View style={styles.authorLine} /><Text style={styles.author}> {author}</Text></View>
-            </View>
-          ) : (
-            <View style={styles.stateContainer}>
-              <Text style={styles.stateTitle}>No quote available yet</Text>
-              <Text style={styles.stateText}>Request a new quote to begin.</Text>
-            </View>
-          )}
-        </View>
-
-        <Pressable disabled={isLoading} onPress={() => void loadQuote(session.token)} style={({ pressed }) => [styles.button, (pressed || isLoading) && styles.buttonPressed]}>
-          {isLoading ? <ActivityIndicator color="#FFFFFF" /> : <Text style={styles.buttonText}>{error ? 'Try Again' : 'New Quote'}</Text>}
-        </Pressable>
+        {isLoading ? (
+          <View style={styles.profileCard}><ActivityIndicator size="large" color="#1D74B7" /><Text style={styles.loadingLabel}>Loading protected profile…</Text></View>
+        ) : error ? (
+          <View style={styles.profileCard}><Text style={styles.errorIcon}>!</Text><Text style={styles.profileErrorTitle}>Profile request failed</Text><Text style={styles.profileErrorText}>{error}</Text><Pressable onPress={onRetry} style={styles.retryButton}><Text style={styles.retryText}>Try Again</Text></Pressable></View>
+        ) : profile ? (
+          <View style={styles.profileCard}>
+            <View style={styles.avatar}><Text style={styles.avatarText}>{initials}</Text></View>
+            <Text style={styles.studentName}>{profile.name}</Text>
+            <View style={styles.roleBadge}><Text style={styles.roleText}>{profile.role ? profile.role.toUpperCase() : 'STUDENT'}</Text></View>
+            <View style={styles.divider} />
+            <ProfileDetail label="Student ID" value={String(profile.id)} />
+            <ProfileDetail label="Email" value={profile.email} />
+            <ProfileDetail label="Access" value="Protected session active" />
+          </View>
+        ) : null}
       </View>
     </SafeAreaView>
   );
 }
 
-function LoadingScreen({ message }: { message: string }) {
-  return <SafeAreaView style={styles.loadingScreen}><StatusBar style="light" /><ActivityIndicator size="large" color="#FFFFFF" /><Text style={styles.loadingText}>{message}</Text></SafeAreaView>;
+function ProfileDetail({ label, value }: { label: string; value: string }) {
+  return <View style={styles.detailRow}><Text style={styles.detailLabel}>{label}</Text><Text style={styles.detailValue}>{value}</Text></View>;
+}
+
+function FullScreenLoader({ label }: { label: string }) {
+  return <SafeAreaView style={styles.fullScreenLoader}><StatusBar style="light" /><ActivityIndicator size="large" color="#FFFFFF" /><Text style={styles.fullScreenLabel}>{label}</Text></SafeAreaView>;
 }
 
 const styles = StyleSheet.create({
-  safeArea: { flex: 1, backgroundColor: '#211C46' }, loadingScreen: { alignItems: 'center', backgroundColor: '#211C46', flex: 1, justifyContent: 'center' }, loadingText: { color: '#FFFFFF', fontSize: 16, marginTop: 16 },
-  container: { flex: 1, justifyContent: 'center', paddingHorizontal: 24, paddingVertical: 28 }, topRow: { alignItems: 'center', flexDirection: 'row', justifyContent: 'space-between', marginBottom: 25 },
-  eyebrow: { color: '#B9B3F7', fontSize: 12, fontWeight: '800', letterSpacing: 1.8 }, userText: { color: '#FFFFFF', fontSize: 15, fontWeight: '700', marginTop: 5 }, title: { color: '#FFFFFF', fontSize: 38, fontWeight: '800', letterSpacing: -1, marginTop: 6 }, subtitle: { color: '#D5D2EC', fontSize: 16, marginTop: 7, marginBottom: 28 },
-  card: { backgroundColor: '#FFFFFF', borderRadius: 28, minHeight: 290, justifyContent: 'center', padding: 28, shadowColor: '#000000', shadowOffset: { width: 0, height: 14 }, shadowOpacity: 0.24, shadowRadius: 24, elevation: 8 }, cardTitle: { color: '#29253D', fontSize: 25, fontWeight: '800' }, cardHint: { color: '#625D73', fontSize: 14, lineHeight: 20, marginBottom: 20, marginTop: 7 },
-  inputLabel: { color: '#474158', fontSize: 13, fontWeight: '800', marginBottom: 7, marginTop: 13 }, input: { backgroundColor: '#F4F2FA', borderColor: '#E3E0EE', borderRadius: 12, borderWidth: 1, color: '#29253D', fontSize: 16, minHeight: 52, paddingHorizontal: 14 }, errorText: { color: '#C63B46', fontSize: 13, fontWeight: '600', lineHeight: 18, marginTop: 15 },
-  quoteContainer: { alignItems: 'flex-start' }, quoteMark: { color: '#6D5DFB', fontFamily: 'serif', fontSize: 64, fontWeight: '700', height: 52, lineHeight: 72 }, quoteText: { color: '#29253D', fontSize: 24, fontWeight: '700', letterSpacing: -0.35, lineHeight: 34, marginTop: 8 }, authorRow: { alignItems: 'center', flexDirection: 'row', marginTop: 26 }, authorLine: { backgroundColor: '#6D5DFB', height: 2, width: 24 }, author: { color: '#625D73', fontSize: 15, fontWeight: '700' },
-  stateContainer: { alignItems: 'center', justifyContent: 'center', paddingHorizontal: 8 }, stateIcon: { color: '#D64A4A', fontSize: 24, fontWeight: '900', marginBottom: 12 }, stateTitle: { color: '#29253D', fontSize: 19, fontWeight: '800', textAlign: 'center' }, stateText: { color: '#625D73', fontSize: 15, lineHeight: 22, marginTop: 8, textAlign: 'center' },
-  button: { alignItems: 'center', backgroundColor: '#6D5DFB', borderRadius: 16, justifyContent: 'center', marginTop: 24, minHeight: 56, shadowColor: '#100B35', shadowOffset: { width: 0, height: 8 }, shadowOpacity: 0.25, shadowRadius: 12, elevation: 5 }, buttonPressed: { opacity: 0.75, transform: [{ scale: 0.99 }] }, buttonText: { color: '#FFFFFF', fontSize: 16, fontWeight: '800' },
-  logoutButton: { borderColor: '#938AE8', borderRadius: 10, borderWidth: 1, paddingHorizontal: 12, paddingVertical: 8 }, logoutText: { color: '#FFFFFF', fontSize: 13, fontWeight: '800' }, securityNote: { color: '#B9B3F7', fontSize: 12, marginTop: 18, textAlign: 'center' },
+  flex: { flex: 1 }, safeArea: { flex: 1, backgroundColor: '#12355B' }, fullScreenLoader: { alignItems: 'center', backgroundColor: '#12355B', flex: 1, justifyContent: 'center' }, fullScreenLabel: { color: '#FFFFFF', fontSize: 16, marginTop: 16 },
+  loginContent: { flexGrow: 1, justifyContent: 'center', padding: 24 }, profileContent: { flex: 1, padding: 24 }, eyebrow: { color: '#A9D9F7', fontSize: 12, fontWeight: '800', letterSpacing: 1.6 }, appTitle: { color: '#FFFFFF', fontSize: 36, fontWeight: '800', letterSpacing: -0.8, marginTop: 6 }, tagline: { color: '#D7E9F5', fontSize: 16, lineHeight: 23, marginBottom: 30, marginTop: 8 },
+  card: { backgroundColor: '#FFFFFF', borderRadius: 24, padding: 24, shadowColor: '#061829', shadowOffset: { width: 0, height: 12 }, shadowOpacity: 0.28, shadowRadius: 22, elevation: 7 }, cardTitle: { color: '#152A3E', fontSize: 25, fontWeight: '800' }, cardDescription: { color: '#607082', fontSize: 15, marginTop: 6 }, inputLabel: { color: '#31475B', fontSize: 13, fontWeight: '800', marginBottom: 8, marginTop: 20 }, input: { backgroundColor: '#F4F7FA', borderColor: '#D7E1EA', borderRadius: 12, borderWidth: 1, color: '#152A3E', fontSize: 16, minHeight: 52, paddingHorizontal: 14 }, inputError: { borderColor: '#D84F5F' }, fieldError: { color: '#BE3647', fontSize: 13, fontWeight: '600', marginTop: 6 }, requestError: { backgroundColor: '#FFF0F1', borderRadius: 9, color: '#A92D3D', fontSize: 13, fontWeight: '600', lineHeight: 19, marginTop: 16, padding: 10 },
+  primaryButton: { alignItems: 'center', backgroundColor: '#1479BD', borderRadius: 13, justifyContent: 'center', marginTop: 24, minHeight: 55 }, primaryButtonText: { color: '#FFFFFF', fontSize: 16, fontWeight: '800' }, buttonPressed: { opacity: 0.72 }, demoHint: { color: '#D7E9F5', fontSize: 13, marginTop: 20, textAlign: 'center' }, secureHint: { color: '#A9D9F7', fontSize: 12, marginTop: 7, textAlign: 'center' },
+  headerRow: { alignItems: 'center', flexDirection: 'row', justifyContent: 'space-between', marginBottom: 34 }, headerTitle: { color: '#FFFFFF', fontSize: 30, fontWeight: '800', marginTop: 5 }, logoutButton: { borderColor: '#8DCAEE', borderRadius: 10, borderWidth: 1, paddingHorizontal: 13, paddingVertical: 9 }, logoutText: { color: '#FFFFFF', fontSize: 13, fontWeight: '800' },
+  profileCard: { alignItems: 'center', backgroundColor: '#FFFFFF', borderRadius: 24, minHeight: 360, padding: 25, shadowColor: '#061829', shadowOffset: { width: 0, height: 12 }, shadowOpacity: 0.28, shadowRadius: 22, elevation: 7 }, loadingLabel: { color: '#516273', fontSize: 16, marginTop: 16 }, avatar: { alignItems: 'center', backgroundColor: '#DDF1FE', borderRadius: 45, height: 90, justifyContent: 'center', width: 90 }, avatarText: { color: '#1479BD', fontSize: 28, fontWeight: '800' }, studentName: { color: '#152A3E', fontSize: 25, fontWeight: '800', marginTop: 17, textAlign: 'center' }, roleBadge: { backgroundColor: '#E5F5EA', borderRadius: 999, marginTop: 10, paddingHorizontal: 12, paddingVertical: 6 }, roleText: { color: '#247240', fontSize: 11, fontWeight: '900', letterSpacing: 0.8 }, divider: { backgroundColor: '#E5EBF0', height: 1, marginVertical: 23, width: '100%' }, detailRow: { marginBottom: 17, width: '100%' }, detailLabel: { color: '#718094', fontSize: 12, fontWeight: '800', letterSpacing: 0.5, textTransform: 'uppercase' }, detailValue: { color: '#253C50', fontSize: 16, fontWeight: '700', marginTop: 4 },
+  errorIcon: { color: '#D84F5F', fontSize: 26, fontWeight: '900', marginTop: 40 }, profileErrorTitle: { color: '#152A3E', fontSize: 20, fontWeight: '800', marginTop: 12 }, profileErrorText: { color: '#607082', fontSize: 15, lineHeight: 22, marginTop: 8, textAlign: 'center' }, retryButton: { backgroundColor: '#1479BD', borderRadius: 11, marginTop: 22, paddingHorizontal: 18, paddingVertical: 11 }, retryText: { color: '#FFFFFF', fontSize: 14, fontWeight: '800' },
 });

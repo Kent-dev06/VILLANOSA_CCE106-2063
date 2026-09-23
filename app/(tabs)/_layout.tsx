@@ -12,7 +12,7 @@ export default function TabLayout() {
       <Tabs.Screen
         name="index"
         options={{
-          title: 'Quotes App',
+          title: 'Student Portal',
         }}
       />
     </Tabs>

@@ -1,3 +1,3 @@
-import { CalculatorScreen } from './(tabs)/index';
+import StudentPortalScreen from './(tabs)/index';
 
-export default CalculatorScreen;
+export default StudentPortalScreen;
