@@ -11,6 +11,7 @@ export default function StudentPortalScreen() {
   const [isAuthLoading, setIsAuthLoading] = useState(true);
   const [isLoginLoading, setIsLoginLoading] = useState(false);
   const [isProfileLoading, setIsProfileLoading] = useState(false);
+  const [isLogoutLoading, setIsLogoutLoading] = useState(false);
   const [sessionMessage, setSessionMessage] = useState('');
 
   // Restore the saved token before deciding between the Login and Profile screens.
@@ -74,17 +75,17 @@ export default function StudentPortalScreen() {
   }
 
   async function handleLogout() {
-    setIsProfileLoading(true);
+    setIsLogoutLoading(true);
     try {
       // Clear both SecureStore and in-memory state so logout survives an app restart.
       await clearStoredSession();
       setSessionMessage('You have been logged out.');
+      setToken(null);
+      setProfile(null);
     } catch {
       setSessionMessage('Unable to update secure storage. Please try logging out again.');
     } finally {
-      setToken(null);
-      setProfile(null);
-      setIsProfileLoading(false);
+      setIsLogoutLoading(false);
     }
   }
 
@@ -112,6 +113,7 @@ export default function StudentPortalScreen() {
     <ProfileScreen
       error={sessionMessage}
       isLoading={isProfileLoading}
+      isLogoutLoading={isLogoutLoading}
       onLogout={() => void handleLogout()}
       onRetry={() => void loadProfile(token)}
       profile={profile}
@@ -181,7 +183,7 @@ function LoginScreen({ disabled, message, onLogin }: { disabled: boolean; messag
   );
 }
 
-function ProfileScreen({ error, isLoading, onLogout, onRetry, profile }: { error: string; isLoading: boolean; onLogout: () => void; onRetry: () => void; profile: StudentProfile | null }) {
+function ProfileScreen({ error, isLoading, isLogoutLoading, onLogout, onRetry, profile }: { error: string; isLoading: boolean; isLogoutLoading: boolean; onLogout: () => void; onRetry: () => void; profile: StudentProfile | null }) {
   const initials = profile?.name.split(' ').map((part) => part[0]).join('').slice(0, 2).toUpperCase() ?? 'SP';
 
   return (
@@ -190,7 +192,7 @@ function ProfileScreen({ error, isLoading, onLogout, onRetry, profile }: { error
       <View style={styles.profileContent}>
         <View style={styles.headerRow}>
           <View><Text style={styles.eyebrow}>AUTHENTICATED AREA</Text><Text style={styles.headerTitle}>My Profile</Text></View>
-          <Pressable accessibilityRole="button" onPress={onLogout} style={styles.logoutButton}><Text style={styles.logoutText}>Logout</Text></Pressable>
+          <Pressable accessibilityRole="button" disabled={isLogoutLoading} onPress={onLogout} style={[styles.logoutButton, isLogoutLoading && styles.buttonPressed]}>{isLogoutLoading ? <ActivityIndicator color="#FFFFFF" /> : <Text style={styles.logoutText}>Logout</Text>}</Pressable>
         </View>
 
         {isLoading ? (
